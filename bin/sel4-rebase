@@ -1,0 +1,69 @@
+#!/bin/sh
+
+# This requires curl, git, and jq to be installed
+
+alias trace_on='set -x'
+alias trace_off='{ set +x; } 2>/dev/null'
+
+if [ $# -ne 2 ]; then
+	printf "Usage: $0 project/repo pr" > /dev/stderr
+	exit 1
+fi
+
+REPO=$1; shift
+PULL=$1; shift
+
+PULLDIR=$(mktemp -d)
+
+cd "$PULLDIR"
+
+# We do the rest in a subshell so we always clean up after
+(
+	set -e
+
+	# Get information from github pull request
+
+	curl -Ls "https://api.github.com/repos/${REPO}/pulls/${PULL}" \
+		| jq > pull.json
+
+	HEAD=$(jq -r ".head.repo.full_name" < pull.json)
+	HEAD_REF=$(jq -r ".head.ref" < pull.json)
+	BASE=$(jq -r ".base.repo.full_name" < pull.json)
+	BASE_REF=$(jq -r ".base.ref" < pull.json)
+
+	rm pull.json
+
+	echo "Rebasing ${HEAD}:${HEAD_REF} against ${BASE}:${BASE_REF}..."
+
+	trace_on
+
+	# Clone the target and the source
+	git clone "ssh://github.com/${BASE}.git" .
+	git checkout "${BASE_REF}"
+	git fetch "https://github.com/${HEAD}.git" "${HEAD_REF}"
+	git checkout -b "PR-${PULL}" FETCH_HEAD
+
+	# Rebase the source against the target
+	git rebase "origin/${BASE_REF}"
+
+	trace_off
+
+	MERGE_DIR="$(git rev-parse --git-path rebase-merge)"
+	APPLY_DIR="$(git rev-parse --git-path rebase-apply)"
+
+	# Check if rebase is still in progress
+	if [ -d "${MERGE_DIR}" ] || [ -d "${APPLY_DIR}" ]; then
+		printf "Rebase failed" > /dev/stderr
+		exit 1
+	fi
+
+	trace_on
+
+	# Force push the result back to the target branch
+	git push --force "ssh://github.com/${HEAD}.git" "HEAD:${HEAD_REF}"
+)
+
+trace_off
+
+cd
+rm -rf "$PULLDIR"
