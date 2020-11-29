@@ -1,0 +1,73 @@
+#!/bin/sh
+
+# This is a simple wrapper around docker/podman to execute commands in
+# a container for seL4 development. The container provided below
+# includes commands required for building the main projects, but not
+# tools for interactive use.
+#
+# If you need an alternative with more tools in the container, you can
+# use an alternative image or checkout
+# https://github.com/seL4/seL4-CAmkES-L4v-dockerfiles
+#
+# Usage:
+#
+#  - interactive session: `s4c`
+#  - command in container: `s4c [command] [arg ...]`
+#  - update the image: `s4c-update`
+
+set -e
+
+# Location of dockerfiles repository
+CONTAINER=docker.io/trustworthysystems/camkes-riscv
+
+# Determine what docker implementation should be used
+if [ "${DOCKER:+SET}" != "SET" ]; then
+	if which podman 2>&1 >/dev/null; then
+		DOCKER=podman
+	else
+		DOCKER=docker
+	fi
+fi
+
+DOCKER_VERSION=$("${DOCKER}" --version)
+
+if [ "${DOCKER_VERSION%% *}" = "podman" ]; then
+	SET_USERID="--userns=keep-id"
+else
+	SET_USERID="-u $(id -u):$(id -g)"
+fi
+
+# Find the repository root
+CURDIR=$(pwd)
+WORKDIR="."
+while [ "$(pwd)" != "/" ] && [ ! -d ".repo" ]; do
+	WORKDIR="$(basename $(pwd))/${WORKDIR}"
+	cd ..
+done
+
+if [ "$(pwd)" = "/" ]; then
+	cd "${CURDIR}"
+	WORKDIR="."
+fi
+
+if [ "${0##*/}" = "s4c-update" ]; then
+	"${DOCKER}" image pull "${CONTAINER}"
+elif [ $# -gt 0 ]; then
+	"${DOCKER}" run \
+		--rm -it \
+		"${SET_USERID}" \
+		--hostname=s4c \
+		-v "$(pwd):/host:z" \
+		--workdir="/host/${WORKDIR}" \
+		"${CONTAINER}" \
+		"$@"
+else
+	"${DOCKER}" run \
+		--rm -it \
+		"${SET_USERID}" \
+		--hostname=s4c \
+		-v "$(pwd):/host:z" \
+		--workdir="/host/${WORKDIR}" \
+		"${CONTAINER}" \
+		bash
+fi
