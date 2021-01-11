@@ -45,6 +45,11 @@ while [ "$(pwd)" != "/" ] && [ ! -d ".repo" ]; do
 	cd ..
 done
 
+# Find the container home directory
+if [ -d "$HOME/.s4c-home" ]; then
+	CONTAINER_HOME="--env HOME -v $(realpath -e "$HOME/.s4c-home"):$HOME:z"
+fi
+
 if [ "$(pwd)" = "/" ]; then
 	cd "${CURDIR}"
 	WORKDIR="."
@@ -58,6 +63,7 @@ elif [ $# -gt 0 ]; then
 		"${SET_USERID}" \
 		--hostname=s4c \
 		-v "$(pwd):/host:z" \
+		${CONTAINER_HOME} \
 		--workdir="/host/${WORKDIR}" \
 		"${CONTAINER}" \
 		"$@"
@@ -67,6 +73,7 @@ else
 		"${SET_USERID}" \
 		--hostname=s4c \
 		-v "$(pwd):/host:z" \
+		${CONTAINER_HOME} \
 		--workdir="/host/${WORKDIR}" \
 		"${CONTAINER}" \
 		bash
