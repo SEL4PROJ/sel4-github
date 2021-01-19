@@ -53,7 +53,13 @@ fi
 if [ "$(pwd)" = "/" ]; then
 	cd "${CURDIR}"
 	WORKDIR="."
+else
+	mkdir -p $(pwd)/tmp
+	# Create a temporary directory
+	SET_TMPDIR="--env TMPDIR=/host/tmp"
 fi
+
+
 
 if [ "${0##*/}" = "s4c-update" ]; then
 	"${DOCKER}" image pull "${CONTAINER}"
@@ -64,6 +70,7 @@ elif [ $# -gt 0 ]; then
 		--hostname=s4c \
 		-v "$(pwd):/host:z" \
 		${CONTAINER_HOME} \
+		${SET_TMPDIR} \
 		--workdir="/host/${WORKDIR}" \
 		"${CONTAINER}" \
 		"$@"
@@ -74,6 +81,7 @@ else
 		--hostname=s4c \
 		-v "$(pwd):/host:z" \
 		${CONTAINER_HOME} \
+		${SET_TMPDIR} \
 		--workdir="/host/${WORKDIR}" \
 		"${CONTAINER}" \
 		bash
